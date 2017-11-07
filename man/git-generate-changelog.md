@@ -187,13 +187,25 @@ Automatically generate change log from your tags, issues, labels and pull reques
 
    Run verbosely. Default is true
 
-  -v, --version
+   --configure-sections [HASH, STRING]
 
-  Print version number
+   Define your own set of sections which overrides all default sections") do |v|
 
-  -h, --help
+   --add-sections [HASH, STRING]
 
-  Displays Help
+   Add new sections but keep the default sections"
+
+   --include-merged
+
+   If configure_sections is set, use this to restore the merged pull requests sections
+
+   -v, --version
+
+   Print version number
+
+   -h, --help
+
+   Displays Help
 
 
 ## EXAMPLES
