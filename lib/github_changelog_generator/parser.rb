@@ -71,6 +71,12 @@ module GitHubChangelogGenerator
         opts.on("--header-label [LABEL]", "Setup custom header label. Default is \"# Change Log\"") do |v|
           options[:header] = v
         end
+        opts.on("--configure-sections [Hash, String]", "Define your own set of sections which overrides all default sections") do |v|
+          options[:configure_sections] = v
+        end
+        opts.on("--add-sections [Hash, String]", "Add new sections but keep the default sections") do |v|
+          options[:add_sections] = v
+        end
         opts.on("--front-matter [JSON]", "Add YAML front matter. Formatted as JSON because it's easier to add on the command line") do |v|
           options[:frontmatter] = JSON.parse(v).to_yaml + "---\n"
         end
@@ -115,6 +121,9 @@ module GitHubChangelogGenerator
         end
         opts.on("--exclude-labels  x,y,z", Array, "Issues with the specified labels will be always excluded from changelog. Default is 'duplicate,question,invalid,wontfix'") do |list|
           options[:exclude_labels] = list
+        end
+        opts.on("--include-merged", "If configure_sections is set, use this to restore the merged pull requests sections") do |v|
+          options[:include_merged] = v
         end
         opts.on("--bug-labels  x,y,z", Array, 'Issues with the specified labels will be always added to "Fixed bugs" section. Default is \'bug,Bug\'') do |list|
           options[:bug_labels] = list
@@ -209,7 +218,10 @@ module GitHubChangelogGenerator
         bug_labels: ["bug", "Bug", "Type: Bug"],
         exclude_labels: ["duplicate", "question", "invalid", "wontfix", "Duplicate", "Question", "Invalid", "Wontfix", "Meta: Exclude From Changelog"],
         breaking_labels: %w[backwards-incompatible breaking],
+        configure_sections: {},
+        add_sections: {},
         issue_line_labels: [],
+        include_merged: true,
         max_issues: nil,
         simple_list: false,
         ssl_ca_file: nil,

@@ -92,11 +92,14 @@ module GitHubChangelogGenerator
       front_matter: :frontmatter,
       pr_label: :merge_prefix,
       breaking_label: :breaking_prefix,
+      include_merged: :include_merged,
       issues_wo_labels: :add_issues_wo_labels,
       pr_wo_labels: :add_pr_wo_labels,
       pull_requests: :pulls,
       filter_by_milestone: :filter_issues_by_milestone,
-      github_api: :github_endpoint
+      github_api: :github_endpoint,
+      configure_sections: :configure_sections,
+      add_sections: :add_sections
     }
 
     def option_key_for(option_name)

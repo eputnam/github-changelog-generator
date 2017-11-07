@@ -15,6 +15,7 @@ module GitHubChangelogGenerator
     KNOWN_OPTIONS = %i[
       add_issues_wo_labels
       add_pr_wo_labels
+      add_sections
       author
       base
       between_tags
@@ -29,6 +30,7 @@ module GitHubChangelogGenerator
       enhancement_prefix
       breaking_labels
       breaking_prefix
+      configure_sections
       exclude_labels
       exclude_tags
       exclude_tags_regex
@@ -40,6 +42,7 @@ module GitHubChangelogGenerator
       header
       http_cache
       include_labels
+      include_merged
       issue_prefix
       issue_line_labels
       issues

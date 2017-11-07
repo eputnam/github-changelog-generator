@@ -5,6 +5,7 @@ require "github_changelog_generator/generator/generator_generation"
 require "github_changelog_generator/generator/generator_fetcher"
 require "github_changelog_generator/generator/generator_processor"
 require "github_changelog_generator/generator/generator_tags"
+require "github_changelog_generator/generator/section"
 
 module GitHubChangelogGenerator
   # Default error for ChangelogGenerator
@@ -12,7 +13,8 @@ module GitHubChangelogGenerator
   end
 
   class Generator
-    attr_accessor :options, :filtered_tags, :github, :tag_section_mapping, :sorted_tags
+    attr_accessor :options, :filtered_tags, :github, :tag_section_mapping, :sorted_tags, :sections
+    attr_reader :lmap, :smap
 
     # A Generator responsible for all logic, related with change log generation from ready-to-parse issues
     #
@@ -23,6 +25,7 @@ module GitHubChangelogGenerator
       @options        = options
       @tag_times_hash = {}
       @fetcher        = GitHubChangelogGenerator::OctoFetcher.new(options)
+      @sections       = []
     end
 
     def fetch_issues_and_pr
@@ -76,17 +79,36 @@ module GitHubChangelogGenerator
 
       log = generate_header(newer_tag_name, newer_tag_link, newer_tag_time, older_tag_name, project_url)
 
+      set_sections_and_maps
+
       if options[:issues]
         # Generate issues:
         log += issues_to_log(issues, pull_requests)
       end
 
-      if options[:pulls] && options[:add_pr_wo_labels]
+      if options[:pulls] && options[:add_pr_wo_labels] && (!configure_sections? || options[:include_merged])
         # Generate pull requests:
-        log += generate_sub_section(pull_requests, options[:merge_prefix])
+        merged = Section.new({ name: "merged", prefix: options[:merge_prefix], labels: [], issues: pull_requests })
+        @sections << merged
+        log += generate_sub_section(merged.issues, merged.prefix)
       end
 
       log
+    end
+
+    # Creates section objects and the label and section maps needed for
+    # sorting
+    def set_sections_and_maps
+      @sections = if configure_sections?
+                    parse_sections(options[:configure_sections])
+                  elsif add_sections?
+                    default_sections.concat parse_sections(options[:add_sections])
+                  else
+                    default_sections
+                  end
+
+      @lmap = label_map
+      @smap = section_map
     end
 
     # Generate ready-to-paste log from list of issues and pull requests.
@@ -95,14 +117,89 @@ module GitHubChangelogGenerator
     # @param [Array] pull_requests
     # @return [String] generated log for issues
     def issues_to_log(issues, pull_requests)
-      sections = parse_by_sections(issues, pull_requests)
+      _sections = parse_by_sections(issues, pull_requests)
 
       log = ""
-      log += generate_sub_section(sections[:breaking], options[:breaking_prefix])
-      log += generate_sub_section(sections[:enhancements], options[:enhancement_prefix])
-      log += generate_sub_section(sections[:bugs], options[:bug_prefix])
-      log += generate_sub_section(sections[:issues], options[:issue_prefix])
+
+      _sections.each do |section|
+        log += generate_sub_section(section.issues, section.prefix)
+      end
+
       log
+    end
+
+    # Boolean method for whether the user is using configure_sections
+    def configure_sections?
+      !options[:configure_sections].nil? && options[:configure_sections].size > 0
+    end
+
+    # Boolean method for whether the user is using add_sections
+    def add_sections?
+      !options[:add_sections].nil? && options[:add_sections].size > 0
+    end
+
+    # Turns a string from the commandline into an array of Section objects
+    #
+    # @param [String, Hash] either string or hash describing sections
+    # @return [Array] array of Section objects
+    def parse_sections(sections_desc)
+      require 'json'
+
+      sections_desc = sections_desc.to_json if sections_desc.class == Hash
+
+      begin
+        sections_json = JSON.parse(sections_desc)
+      rescue JSON::ParserError => e
+        raise "There was a problem parsing your JSON string for secions: #{e}"
+      end
+
+      sections_arr = []
+
+      sections_json.each do |name, v|
+        sections_arr << Section.new({name: name.to_s, prefix: v['prefix'], labels: v['labels']})
+      end
+
+      sections_arr
+    end
+
+    # Set of default sections for backwards-compatibility/defaults
+    #
+    # @return [Array] array of Section objects
+    def default_sections
+      [
+        Section.new({name: 'breaking', prefix: options[:breaking_prefix], labels: options[:breaking_labels]}),
+        Section.new({name: 'enhancements', prefix: options[:enhancement_prefix], labels: options[:enhancement_labels]}),
+        Section.new({name: 'bugs', prefix: options[:bug_prefix], labels: options[:bug_labels]}),
+        Section.new({name: 'issues', prefix: options[:issue_prefix], labels: options[:issue_labels]})
+      ]
+    end
+
+    # Creates a hash map of labels => section objects
+    #
+    # @return [Hash] map of labels => section objects
+    def label_map
+      label_to_section = {}
+
+      @sections.each do |section_obj|
+        section_obj.labels.each do |label|
+          label_to_section[label] = section_obj.name
+        end
+      end
+
+      label_to_section
+    end
+
+    # Creates a hash map of 'section name' => section object
+    #
+    # @return [Hash] map of 'section name' => section object
+    def section_map
+      map = {}
+
+      @sections.each do |section|
+        map[section.name] = section
+      end
+
+      map
     end
 
     # This method sort issues by types
@@ -112,35 +209,21 @@ module GitHubChangelogGenerator
     # @param [Array] pull_requests
     # @return [Hash] Mapping of filtered arrays: (Bugs, Enhancements, Breaking stuff, Issues)
     def parse_by_sections(issues, pull_requests)
-      sections = {
-        issues: [],
-        enhancements: [],
-        bugs: [],
-        breaking: []
-      }
-
       issues.each do |dict|
         added = false
 
         dict["labels"].each do |label|
-          if options[:bug_labels].include?(label["name"])
-            sections[:bugs] << dict
-            added = true
-          elsif options[:enhancement_labels].include?(label["name"])
-            sections[:enhancements] << dict
-            added = true
-          elsif options[:breaking_labels].include?(label["name"])
-            sections[:breaking] << dict
-            added = true
-          end
+          break if @lmap[label['name']].nil?
+          @smap[@lmap[label['name']]].issues << dict
+          added = true
 
           break if added
         end
-
-        sections[:issues] << dict unless added
+        if @smap['issues']
+          @sections.select { |sect| sect.name == "issues" }.last.issues << dict unless added
+        end
       end
-
-      sort_pull_requests(pull_requests, sections)
+      sort_pull_requests(pull_requests, @sections)
     end
 
     # This method iterates through PRs and sorts them into sections
@@ -154,25 +237,16 @@ module GitHubChangelogGenerator
         added = false
 
         pr["labels"].each do |label|
-          if options[:bug_labels].include?(label["name"])
-            sections[:bugs] << pr
-            added_pull_requests << pr
-            added = true
-          elsif options[:enhancement_labels].include?(label["name"])
-            sections[:enhancements] << pr
-            added_pull_requests << pr
-            added = true
-          elsif options[:breaking_labels].include?(label["name"])
-            sections[:breaking] << pr
-            added_pull_requests << pr
-            added = true
-          end
+          break if @lmap[label['name']].nil?
+          @smap[@lmap[label['name']]].issues << pr
+          added_pull_requests << pr
+          added = true
 
           break if added
         end
       end
       added_pull_requests.each { |p| pull_requests.delete(p) }
-      sections
+      @sections
     end
   end
 end
