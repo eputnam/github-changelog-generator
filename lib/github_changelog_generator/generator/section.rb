@@ -1,6 +1,5 @@
 module GitHubChangelogGenerator
   class Section
-
     attr_accessor :name, :prefix, :issues, :labels
 
     def initialize(opts = {})
@@ -9,6 +8,5 @@ module GitHubChangelogGenerator
       @labels = opts[:labels] || []
       @issues = opts[:issues] || []
     end
-
   end
 end

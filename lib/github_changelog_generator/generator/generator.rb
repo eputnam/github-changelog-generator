@@ -81,19 +81,29 @@ module GitHubChangelogGenerator
 
       set_sections_and_maps
 
-      if options[:issues]
-        # Generate issues:
-        log += issues_to_log(issues, pull_requests)
-      end
-
-      if options[:pulls] && options[:add_pr_wo_labels] && (!configure_sections? || options[:include_merged])
-        # Generate pull requests:
-        merged = Section.new({ name: "merged", prefix: options[:merge_prefix], labels: [], issues: pull_requests })
-        @sections << merged
-        log += generate_sub_section(merged.issues, merged.prefix)
-      end
+      log += main_sections_to_log(issues, pull_requests)
+      log += merged_section(pull_requests) if options[:pulls] && options[:add_pr_wo_labels] && (!configure_sections? || options[:include_merged])
 
       log
+    end
+
+    # Generates main sections for a tag
+    #
+    # @param [Array] issues
+    # @param [Array] pull_requests
+    # @return [string] ready-to-go sub-sections
+    def main_sections_to_log(issues, pull_requests)
+      issues_to_log(issues, pull_requests) if options[:issues]
+    end
+
+    # Generates section for prs with no labels (for a tag)
+    #
+    # @param [Array] pull_requests
+    # @return [string] ready-to-go sub-section
+    def merged_section_to_log(pull_requests)
+      merged = Section.new(name: "merged", prefix: options[:merge_prefix], labels: [], issues: pull_requests)
+      @sections << merged
+      generate_sub_section(merged.issues, merged.prefix)
     end
 
     # Creates section objects and the label and section maps needed for
@@ -117,11 +127,11 @@ module GitHubChangelogGenerator
     # @param [Array] pull_requests
     # @return [String] generated log for issues
     def issues_to_log(issues, pull_requests)
-      _sections = parse_by_sections(issues, pull_requests)
+      sections_to_log = parse_by_sections(issues, pull_requests)
 
       log = ""
 
-      _sections.each do |section|
+      sections_to_log.each do |section|
         log += generate_sub_section(section.issues, section.prefix)
       end
 
@@ -130,12 +140,12 @@ module GitHubChangelogGenerator
 
     # Boolean method for whether the user is using configure_sections
     def configure_sections?
-      !options[:configure_sections].nil? && options[:configure_sections].size > 0
+      !options[:configure_sections].nil? && !options[:configure_sections].empty?
     end
 
     # Boolean method for whether the user is using add_sections
     def add_sections?
-      !options[:add_sections].nil? && options[:add_sections].size > 0
+      !options[:add_sections].nil? && !options[:add_sections].empty?
     end
 
     # Turns a string from the commandline into an array of Section objects
@@ -143,7 +153,7 @@ module GitHubChangelogGenerator
     # @param [String, Hash] either string or hash describing sections
     # @return [Array] array of Section objects
     def parse_sections(sections_desc)
-      require 'json'
+      require "json"
 
       sections_desc = sections_desc.to_json if sections_desc.class == Hash
 
@@ -156,7 +166,7 @@ module GitHubChangelogGenerator
       sections_arr = []
 
       sections_json.each do |name, v|
-        sections_arr << Section.new({name: name.to_s, prefix: v['prefix'], labels: v['labels']})
+        sections_arr << Section.new(name: name.to_s, prefix: v["prefix"], labels: v["labels"])
       end
 
       sections_arr
@@ -167,10 +177,10 @@ module GitHubChangelogGenerator
     # @return [Array] array of Section objects
     def default_sections
       [
-        Section.new({name: 'breaking', prefix: options[:breaking_prefix], labels: options[:breaking_labels]}),
-        Section.new({name: 'enhancements', prefix: options[:enhancement_prefix], labels: options[:enhancement_labels]}),
-        Section.new({name: 'bugs', prefix: options[:bug_prefix], labels: options[:bug_labels]}),
-        Section.new({name: 'issues', prefix: options[:issue_prefix], labels: options[:issue_labels]})
+        Section.new(name: "breaking", prefix: options[:breaking_prefix], labels: options[:breaking_labels]),
+        Section.new(name: "enhancements", prefix: options[:enhancement_prefix], labels: options[:enhancement_labels]),
+        Section.new(name: "bugs", prefix: options[:bug_prefix], labels: options[:bug_labels]),
+        Section.new(name: "issues", prefix: options[:issue_prefix], labels: options[:issue_labels])
       ]
     end
 
@@ -213,17 +223,17 @@ module GitHubChangelogGenerator
         added = false
 
         dict["labels"].each do |label|
-          break if @lmap[label['name']].nil?
-          @smap[@lmap[label['name']]].issues << dict
+          break if @lmap[label["name"]].nil?
+          @smap[@lmap[label["name"]]].issues << dict
           added = true
 
           break if added
         end
-        if @smap['issues']
+        if @smap["issues"]
           @sections.select { |sect| sect.name == "issues" }.last.issues << dict unless added
         end
       end
-      sort_pull_requests(pull_requests, @sections)
+      sort_pull_requests(pull_requests)
     end
 
     # This method iterates through PRs and sorts them into sections
@@ -231,14 +241,14 @@ module GitHubChangelogGenerator
     # @param [Array] pull_requests
     # @param [Hash] sections
     # @return [Hash] sections
-    def sort_pull_requests(pull_requests, sections)
+    def sort_pull_requests(pull_requests)
       added_pull_requests = []
       pull_requests.each do |pr|
         added = false
 
         pr["labels"].each do |label|
-          break if @lmap[label['name']].nil?
-          @smap[@lmap[label['name']]].issues << pr
+          break if @lmap[label["name"]].nil?
+          @smap[@lmap[label["name"]]].issues << pr
           added_pull_requests << pr
           added = true
 
