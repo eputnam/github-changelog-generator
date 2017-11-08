@@ -77,12 +77,13 @@ module GitHubChangelogGenerator
           older_tag["name"]
         end
 
-      log = generate_header(newer_tag_name, newer_tag_link, newer_tag_time, older_tag_name, project_url)
-
       set_sections_and_maps
 
-      log += main_sections_to_log(issues, pull_requests)
-      log += merged_section(pull_requests) if options[:pulls] && options[:add_pr_wo_labels] && (!configure_sections? || options[:include_merged])
+      log = ''
+
+      log = generate_header(newer_tag_name, newer_tag_link, newer_tag_time, older_tag_name, project_url)
+
+      log += generate_body(pull_requests, issues)
 
       log
     end
@@ -102,8 +103,20 @@ module GitHubChangelogGenerator
     # @return [string] ready-to-go sub-section
     def merged_section_to_log(pull_requests)
       merged = Section.new(name: "merged", prefix: options[:merge_prefix], labels: [], issues: pull_requests)
-      @sections << merged
+      @sections << merged unless @sections.select { |section| section.name == 'merged' }
       generate_sub_section(merged.issues, merged.prefix)
+    end
+
+    # Generates complete body section for a tag (without a header)
+    #
+    # @param [Array] issues
+    # @param [Array] pull_requests
+    # @returns [String] ready-to-go tag body
+    def generate_body(pull_requests,issues)
+      body = ''
+      body += main_sections_to_log(issues, pull_requests)
+      body += merged_section_to_log(pull_requests) if (options[:pulls] && options[:add_pr_wo_labels]) || (configure_sections? && options[:include_merged])
+      body
     end
 
     # Creates section objects and the label and section maps needed for
