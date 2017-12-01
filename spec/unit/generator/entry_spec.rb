@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-describe GitHubChangelogGenerator::Generator do
+describe GitHubChangelogGenerator::Entry do
   def label(name)
     { "name" => name }
   end
